@@ -5,6 +5,8 @@
       "args": [
         "run",
         "--locked",
+        "--extra",
+        "plugin",
         "sahakaram",
         "plugin-mcp"
       ],

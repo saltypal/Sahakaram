@@ -36,6 +36,9 @@ def mcp() -> None:
         raise typer.Exit(code=2) from None
 
     configure_logging(settings.log_level)
+    if importlib.util.find_spec("mcp") is None:
+        typer.echo("Install the optional MCP interface with: uv sync --extra plugin", err=True)
+        raise typer.Exit(2)
     from sahakaram.server import create_server
 
     if settings.auto_start_control:
@@ -74,18 +77,21 @@ def connect(url: str) -> None:
 
 @app.command()
 def share(port: Annotated[int, typer.Option(min=1, max=65535)] = 8788) -> None:
-    """Publish only the room hub through an explicitly started Cloudflare quick tunnel."""
+    """Publish only the room hub through an explicitly started Microsoft Dev Tunnel."""
     import shutil
     import subprocess
 
-    executable = shutil.which("cloudflared")
+    executable = shutil.which("devtunnel")
     if not executable:
-        typer.echo("Install cloudflared first; see docs/friend-demo.md", err=True)
+        typer.echo(
+            "Install devtunnel and run devtunnel user login first; see docs/friend-demo.md",
+            err=True,
+        )
         raise typer.Exit(2)
     typer.echo("Keep this terminal open. Share the HTTPS URL and a separate one-use invitation.")
     try:
         result = subprocess.run(
-            [executable, "tunnel", "--url", f"http://127.0.0.1:{port}", "--no-autoupdate"],
+            [executable, "host", "-p", str(port), "--allow-anonymous"],
             check=False,
         )
     except KeyboardInterrupt:
@@ -225,12 +231,13 @@ def lock() -> None:
 
 
 def database_url(settings: Settings) -> str:
-    if not settings.database_url:
-        typer.echo(
-            "Set SAHAKARAM_DATABASE_URL to the explicitly selected PostgreSQL database", err=True
-        )
-        raise typer.Exit(2)
-    return settings.database_url.get_secret_value()
+    from sahakaram.storage.database import default_database_url
+
+    return (
+        settings.database_url.get_secret_value()
+        if settings.database_url
+        else default_database_url(settings.state_dir)
+    )
 
 
 @app.command("db-upgrade")
@@ -251,29 +258,10 @@ def hub(
     port: Annotated[int, typer.Option(min=1, max=65535)] = 8788,
     session_minutes: Annotated[int, typer.Option(min=1, max=1440)] = 15,
 ) -> None:
-    """Run a PostgreSQL-backed room host on loopback; migrate explicitly beforehand."""
-    import uvicorn
-    from filelock import FileLock
+    """Run the standalone SQLite backend; initialize its local file automatically."""
+    from sahakaram.backend import run_backend
 
-    from sahakaram.hub import create_hub
-    from sahakaram.security import Tokens, local_secret
-    from sahakaram.services import Rooms
-    from sahakaram.storage.database import create_database
-
-    settings = Settings()
-    engine = create_database(database_url(settings))
-    settings.state_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        with FileLock(str(settings.state_dir / "room-host.lock"), timeout=0):
-            signing = local_secret(settings.state_dir / "host-signing.key")
-            bootstrap_key = local_secret(settings.state_dir / "host-bootstrap.key")
-            service = Rooms(engine, Tokens(signing, ttl_minutes=session_minutes))
-            application = create_hub(engine, service, bootstrap_key)
-            uvicorn.run(
-                application, host="127.0.0.1", port=port, log_level=settings.log_level.lower()
-            )
-    finally:
-        engine.dispose()
+    run_backend(Settings(), port=port, session_minutes=session_minutes)
 
 
 @app.command()
@@ -287,7 +275,8 @@ def doctor() -> None:
     report = {
         "python_package": __version__,
         "codex_sdk_installed": importlib.util.find_spec("openai_codex") is not None,
-        "database_configured": settings.database_url is not None,
+        "database_backend": "sqlite",
+        "database_configured": True,
         "local_control_running": False,
     }
     try:

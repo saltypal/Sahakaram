@@ -1,4 +1,4 @@
-"""Authenticated local room HTTP/WebSocket transport for Phases 2–3."""
+"""Authenticated local room HTTP/WebSocket transport, independent of client interfaces."""
 
 import asyncio
 import secrets
@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sahakaram.security import Actor
 from sahakaram.services import DomainError, Rooms
 from sahakaram.storage import schema as s
+from sahakaram.storage.database import write_transaction
 
 
 class Input(BaseModel):
@@ -115,13 +116,12 @@ def create_hub(
         if recover:
 
             def recovery() -> None:
-                with engine.begin() as c:
+                with write_transaction(engine) as c:
                     room_ids: list[UUID] = list(
                         c.execute(
                             select(s.rooms.c.id)
                             .where(s.rooms.c.status.in_(["active", "draining"]))
                             .order_by(s.rooms.c.id)
-                            .with_for_update()
                         )
                         .scalars()
                         .all()

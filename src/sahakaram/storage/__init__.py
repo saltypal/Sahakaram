@@ -1,1 +1,1 @@
-"""PostgreSQL persistence and versioned schema."""
+"""SQLite persistence and versioned schema; legacy PostgreSQL files are historical."""

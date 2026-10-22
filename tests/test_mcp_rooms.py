@@ -1,4 +1,4 @@
-"""Real MCP stdio clients traverse a subprocess HTTP hub into isolated PostgreSQL."""
+"""Real MCP stdio clients traverse a subprocess HTTP hub into isolated SQLite."""
 
 import asyncio
 import json
@@ -49,11 +49,8 @@ async def call(client: Client, name: str, arguments: dict[str, Any]) -> dict[str
 
 
 @pytest.mark.asyncio
-async def test_mcp_room_transport_postgresql(database: Engine, tmp_path: Path) -> None:
-    with database.connect() as connection:
-        namespace = connection.execute(text("SELECT current_schema()")).scalar_one()
-    assert namespace.startswith("sahakaram_test_")
-    dsn = database.url.update_query_dict({"options": f"-csearch_path={namespace}"})
+async def test_mcp_room_transport_sqlite(database: Engine, tmp_path: Path) -> None:
+    dsn = database.url
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]

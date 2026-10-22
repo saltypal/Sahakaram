@@ -122,7 +122,7 @@ class RoomBridge:
         saved = self.settings.state_dir / "connection.json"
         if "SAHAKARAM_HUB_URL" not in os.environ and saved.exists():
             self.base = validate_hub_url(json.loads(saved.read_text(encoding="utf-8"))["hub_url"])
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = {"Accept": "application/json"}
         if bootstrap:
             if urlsplit(self.base).hostname not in {"127.0.0.1", "localhost", "::1"}:
                 raise BridgeError("FORBIDDEN: host bootstrap is loopback-only")
@@ -142,7 +142,7 @@ class RoomBridge:
                     raise BridgeError("AUTH_REQUIRED: local profile unlock expired")
             headers["X-Sahakaram-Bootstrap"] = key_path.read_text(encoding="utf-8").strip()
         elif room_id:
-            headers = self._headers(room_id, admin)
+            headers.update(self._headers(room_id, admin))
         try:
             async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
                 response = await client.request(

@@ -52,7 +52,7 @@ async def test_official_client_discovers_and_calls_stdio_tool() -> None:
                     "status",
                     "local_control",
                     "codex_adapter",
-                    "postgresql",
+                    "sqlite",
                     "local_rooms",
                 ],
             }

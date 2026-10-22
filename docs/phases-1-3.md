@@ -1,3 +1,5 @@
+> Historical v0.3 implementation record. Current V1 uses SQLite, a standalone backend, and Dev Tunnels. See backend.md and friend-demo.md.
+
 # Phases 1–3 implementation record
 
 Implemented version: 0.3.0. Python application code only. Phase 0 files and its

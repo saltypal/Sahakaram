@@ -1,4 +1,4 @@
-"""Room scenarios through HTTP plus direct PostgreSQL integrity/concurrency checks."""
+"""Room scenarios through HTTP plus direct SQLite integrity/concurrency checks."""
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -329,13 +329,15 @@ def test_usage_windows_are_separate_and_unknown_not_zero(client, database):
         ).status_code
         == 422
     )
+    latest = client.get("/api/v1/room", headers=headers).json()["usage"][0]
+    assert latest["availability"] == "unavailable"
     with database.connect() as c:
         assert c.execute(sa.select(sa.func.count()).select_from(s.usage_windows)).scalar_one() == 2
 
 
 def test_other_databases_are_rejected():
-    with pytest.raises(ValueError, match="requires PostgreSQL"):
-        create_database("sqlite:///not-supported.db")
+    with pytest.raises(ValueError, match="requires a local SQLite"):
+        create_database("postgresql://not-supported/database")
 
 
 def test_human_departure_releases_owned_seat_and_revokes_agent(client):

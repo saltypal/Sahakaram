@@ -1,3 +1,3 @@
-"""Current domain schema; revision 0001 remains frozen in schema_v1."""
+"""Runtime SQLite schema; historical PostgreSQL metadata is retained separately."""
 
-from sahakaram.storage.schema_v1 import *  # noqa: F403
+from sahakaram.storage.sqlite_v1 import *  # noqa: F403

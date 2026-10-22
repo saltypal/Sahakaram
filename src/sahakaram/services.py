@@ -14,6 +14,7 @@ from sqlalchemy import Connection, Engine
 
 from sahakaram.security import Actor, Tokens
 from sahakaram.storage import schema as s
+from sahakaram.storage.database import write_transaction
 
 
 class DomainError(Exception):
@@ -67,11 +68,7 @@ class Rooms:
         return actor
 
     def _room(self, c: Connection, room_id: UUID, *, active: bool = False) -> dict[str, Any]:
-        row = (
-            c.execute(sa.select(s.rooms).where(s.rooms.c.id == room_id).with_for_update())
-            .mappings()
-            .first()
-        )
+        row = c.execute(sa.select(s.rooms).where(s.rooms.c.id == room_id)).mappings().first()
         if not row:
             fail("NOT_FOUND", "Room not found", 404)
         if active and row["status"] != "active":
@@ -107,7 +104,7 @@ class Rooms:
 
     def register(self, displayname: str, label: str, user_id: UUID | None = None) -> dict[str, str]:
         user_id, account_id = user_id or uuid4(), uuid4()
-        with self.engine.begin() as c:
+        with write_transaction(self.engine) as c:
             if not c.execute(sa.select(s.users.c.id).where(s.users.c.id == user_id)).first():
                 c.execute(sa.insert(s.users).values(id=user_id, displayname=displayname))
             c.execute(
@@ -128,11 +125,9 @@ class Rooms:
     ) -> dict[str, Any]:
         room_id, member_id, participant_id = uuid4(), uuid4(), uuid4()
         link_hash = self.hasher.hash(link_phrase) if link_phrase else None
-        with self.engine.begin() as c:
+        with write_transaction(self.engine) as c:
             account = (
-                c.execute(
-                    sa.select(s.accounts).where(s.accounts.c.id == account_id).with_for_update()
-                )
+                c.execute(sa.select(s.accounts).where(s.accounts.c.id == account_id))
                 .mappings()
                 .first()
             )
@@ -175,7 +170,7 @@ class Rooms:
     def invite(self, actor: Actor, kind: str = "agent", ttl: int = 1800) -> dict[str, str]:
         secret, invite_id = secrets.token_urlsafe(32), uuid4()
         expiry = datetime.now(UTC) + timedelta(seconds=ttl)
-        with self.engine.begin() as c:
+        with write_transaction(self.engine) as c:
             self._room(c, actor.room_id, active=True)
             self._authorize(self._actor(c, actor), actor, admin=True)
             c.execute(
@@ -205,7 +200,7 @@ class Rooms:
         link_phrase: str | None = None,
     ) -> dict[str, Any]:
         digest = hashlib.sha256(secret.encode()).hexdigest()
-        with self.engine.begin() as c:
+        with write_transaction(self.engine) as c:
             initial = (
                 c.execute(sa.select(s.invitations).where(s.invitations.c.token_hash == digest))
                 .mappings()
@@ -216,11 +211,7 @@ class Rooms:
             room_id = initial["room_id"]
             room = self._room(c, room_id, active=True)
             invite = (
-                c.execute(
-                    sa.select(s.invitations)
-                    .where(s.invitations.c.id == initial["id"])
-                    .with_for_update()
-                )
+                c.execute(sa.select(s.invitations).where(s.invitations.c.id == initial["id"]))
                 .mappings()
                 .one()
             )
@@ -329,7 +320,7 @@ class Rooms:
             return result
 
     def snapshot(self, actor: Actor) -> dict[str, Any]:
-        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as c:
+        with self.engine.connect() as c:
             with c.begin():
                 self._actor(c, actor)
                 room = (
@@ -427,7 +418,7 @@ class Rooms:
         recipient_id: UUID | None = None,
         task_id: UUID | None = None,
     ) -> dict[str, Any]:
-        with self.engine.begin() as c:
+        with write_transaction(self.engine) as c:
             self._room(c, actor.room_id, active=True)
             self._actor(c, actor)
             sender_col = (
@@ -496,7 +487,7 @@ class Rooms:
         parent_task_id: UUID | None = None,
         repository_id: UUID | None = None,
     ) -> dict[str, Any]:
-        with self.engine.begin() as c:
+        with write_transaction(self.engine) as c:
             room = self._room(c, actor.room_id, active=True)
             self._authorize(self._actor(c, actor), actor)
             existing = (
@@ -567,22 +558,18 @@ class Rooms:
         status: str | None = None,
         result_summary: str | None = None,
     ) -> dict[str, Any]:
-        with self.engine.begin() as c:
-            # Account lock precedes room lock; claims in different rooms serialize per account.
+        with write_transaction(self.engine) as c:
+            # SQLite writer reservation precedes every state check, including across rooms.
             acting = self._actor(c, actor)
             if actor.kind == "agent":
-                c.execute(
-                    sa.select(s.accounts.c.id)
-                    .where(s.accounts.c.id == acting["account_id"])
-                    .with_for_update()
-                )
+                c.execute(sa.select(s.accounts.c.id).where(s.accounts.c.id == acting["account_id"]))
             room = self._room(c, actor.room_id)
             acting = self._actor(c, actor)
             row = (
                 c.execute(
-                    sa.select(s.tasks)
-                    .where(s.tasks.c.id == task_id, s.tasks.c.room_id == actor.room_id)
-                    .with_for_update()
+                    sa.select(s.tasks).where(
+                        s.tasks.c.id == task_id, s.tasks.c.room_id == actor.room_id
+                    )
                 )
                 .mappings()
                 .first()
@@ -683,7 +670,7 @@ class Rooms:
             return dict(updated)
 
     def room_state(self, actor: Actor, status: str) -> dict[str, Any]:
-        with self.engine.begin() as c:
+        with write_transaction(self.engine) as c:
             room = self._room(c, actor.room_id)
             self._authorize(self._actor(c, actor), actor, admin=True)
             if room["status"] == "closed":
@@ -693,7 +680,7 @@ class Rooms:
             return {"status": status}
 
     def kick(self, actor: Actor, participant_id: UUID) -> None:
-        with self.engine.begin() as c:
+        with write_transaction(self.engine) as c:
             self._room(c, actor.room_id)
             self._authorize(self._actor(c, actor), actor, admin=True)
             target = (
@@ -733,7 +720,7 @@ class Rooms:
             )
 
     def leave(self, actor: Actor) -> None:
-        with self.engine.begin() as c:
+        with write_transaction(self.engine) as c:
             room = self._room(c, actor.room_id)
             current = self._actor(c, actor)
             if current["role"] in ("admin", "lead") and room["status"] != "closed":
@@ -791,7 +778,7 @@ class Rooms:
         windows: list[dict[str, Any]],
         error_code: str | None = None,
     ) -> dict[str, str]:
-        with self.engine.begin() as c:
+        with write_transaction(self.engine) as c:
             self._room(c, actor.room_id)
             row = self._actor(c, actor)
             if actor.kind != "agent":
@@ -802,6 +789,7 @@ class Rooms:
                     id=snapshot_id,
                     account_id=row["account_id"],
                     source="companion",
+                    observed_at=datetime.now(UTC),
                     availability=availability,
                     error_code=error_code,
                 )

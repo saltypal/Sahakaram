@@ -1,6 +1,6 @@
 {
   "name": "sahakaram",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Supervised collaboration rooms for coding agents: shared discussion, tasks, replay and usage observations.",
   "author": {
     "name": "saltypal"

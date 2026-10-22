@@ -1,7 +1,7 @@
 # A first room with a friend
 
 This walkthrough connects existing Codex agents. Neither side needs the optional
-Codex SDK. The host needs PostgreSQL and cloudflared; teammates do not.
+Codex SDK. The host runs a standalone SQLite backend. No database server is needed.
 
 ## 1. Both people install the plugin
 
@@ -11,7 +11,7 @@ codex plugin add sahakaram@sahakaram
 ```
 
 Reload Codex and call `get_status`. For a client without marketplace support, use
-`codex mcp add sahakaram --env SAHAKARAM_STATE_DIR=ABSOLUTE_PRIVATE_STATE_PATH -- uv run --locked --project ABSOLUTE_CLONE_PATH sahakaram mcp`.
+`codex mcp add sahakaram --env SAHAKARAM_STATE_DIR=ABSOLUTE_PRIVATE_STATE_PATH -- uv run --locked --project ABSOLUTE_CLONE_PATH --extra plugin sahakaram mcp`.
 The supported packaged layout is documented by
 [OpenAI](https://developers.openai.com/plugins/build/plugins).
 
@@ -39,57 +39,73 @@ This matches the plugin's default state. The source checkout's normal CLI defaul
 otherwise to `.state`. Keeping one consistent directory matters: it holds the local
 unlock session and host signing/bootstrap keys. Do not share or commit it.
 
-Create a PostgreSQL database for Sahakaram using your normal PostgreSQL tools.
-Set its connection URL in the hosting terminal:
-
-```powershell
-$env:SAHAKARAM_DATABASE_URL = 'postgresql+psycopg://USER:PASSWORD@127.0.0.1:5432/sahakaram'
-```
-
-For Bash use `export SAHAKARAM_DATABASE_URL='...'`. Replace the placeholder values;
-use an environment variable or secret store, never a committed configuration file.
-Only this host needs the database. Then:
+Start the backend; it creates and migrates the local SQLite file automatically:
 
 ```sh
-uv run --locked sahakaram db-upgrade
+uv run --locked sahakaram-backend --session-minutes 120
+```
+
+Keep that terminal open. The explicit 120-minute credential lifetime is for this
+bounded demo; the default is 15 minutes. Revocation still applies immediately.
+The existing PostgreSQL database, if any, is untouched and is not imported.
+
+In another terminal using the same private state directory, authorize the plugin's
+host actions (base CLI does not need MCP to manage the local profile):
+
+```sh
 uv run --locked sahakaram setup --displayname Alice
 uv run --locked sahakaram unlock
-uv run --locked sahakaram hub --session-minutes 120
 ```
 
-`setup` and `unlock` ask for the local profile passphrase privately in the terminal.
-For an existing profile, skip setup and run unlock. Keep the hub terminal open.
-The explicit 120-minute bearer lifetime is for this bounded demo; the default is
-15 minutes. Revocation still applies immediately. There is no automatic renewal
-or expired-session recovery yet, so finish or checkpoint within that interval.
+Passphrases stay in the terminal. Skip setup for an existing profile. The standalone
+backend does not require a Codex profile; this unlock belongs to the host plugin's
+local authorization flow. See [backend.md](backend.md) for direct HTTP clients.
 
-## 3. Host: expose only the room API
+## 3. Host: Dev Tunnels or port forwarding
 
-Install [cloudflared](https://developers.cloudflare.com/tunnel/downloads/).
-In a second terminal, from the checkout:
+### Option A: VS Code Ports view
+
+Open VS Code, open the Ports view, and forward port **8788**. Sign in with your
+GitHub/Microsoft account if prompted. For this invitation-based demo, make that
+forwarded port Public and copy its HTTPS forwarding URL. This permits requests to
+reach the API; Sahakaram still requires its own invitations and room credentials.
+A private browser-authenticated port will redirect a friend's MCP client to login.
+
+Do not forward port 8787 (local account control) or share the SQLite file.
+Follow [VS Code port forwarding documentation](https://code.visualstudio.com/docs/debugtest/port-forwarding).
+
+### Option B: Microsoft Dev Tunnels CLI
+
+Install [devtunnel](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/get-started)
+and log in yourself:
 
 ```sh
+devtunnel user login -g
 uv run --locked sahakaram share
 ```
 
-It runs `cloudflared tunnel --url http://127.0.0.1:8788 --no-autoupdate` and prints
-an HTTPS `trycloudflare.com` URL. Keep this terminal open. It publishes the room
-API, not the local account control service or PostgreSQL. Quick Tunnels are
-[temporary development endpoints](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
-without an uptime guarantee. Sahakaram uses ordinary HTTP requests and event replay;
-its friend workflow does not require SSE.
+The wrapper runs `devtunnel host -p 8788 --allow-anonymous`. It does not install the
+CLI or perform account login. Keep the host terminal open and copy the HTTPS URL.
+The transport allows anonymous requests, while Sahakaram's API still enforces
+invitation and bearer authorization. No Microsoft/GitHub login token is sent in
+room messages. See [Microsoft's command reference](https://learn.microsoft.com/en-us/azure/developer/dev-tunnels/cli-commands).
 
-Before sending the invitation, confirm that `HOST_URL/readyz` returns
-`{"status":"ready"}`. A newly generated hostname can take time to appear in DNS
-even after cloudflared registers its connection. If hostname resolution initially
-fails, allow DNS publication to finish before retrying. The release smoke check
-verified ordinary HTTPS and an MCP join after DNS became available, without
-bypassing the local resolver or TLS verification.
+Before inviting your teammate, check `HOST_URL/readyz` returns `{"status":"ready"}`.
+API clients request JSON to avoid the tunnel's HTML anti-phishing interstitial.
+If using a private Dev Tunnel, separate tunnel authentication must be configured;
+the simple walkthrough uses public transport with Sahakaram authorization.
 
-Do not enable interactive email authentication on this tunnel: the MCP bridge is
-not a browser. Room calls use Sahakaram invitation/bearer credentials instead.
-For a longer-lived deployment use a managed tunnel/private network and stronger
-operational controls; that deployment is not provided by this preview.
+### Option C: an existing SSH local forward
+
+If your friend already has SSH access to the host, they can run:
+
+```sh
+ssh -N -L 8789:127.0.0.1:8788 USER@HOST
+```
+
+They then call connect_hub with `http://127.0.0.1:8789`. HTTP loopback is accepted;
+remote origins require HTTPS. The SSH connection supplies transport encryption.
+Do not expose an unauthenticated plaintext backend port directly to the internet.
 
 ## 4. Host Codex: create the room and invite
 
@@ -145,8 +161,8 @@ access nor performs Git operations. Avoid both agents editing the same file.
 ## 7. Finish and stop
 
 Ask the lead to summarize merged changes, tests, and unfinished work in the room.
-The human administrator can pause or close it. Teammates can leave. Stop the share
-and hub terminals with Ctrl+C; that removes the temporary public endpoint.
+The human administrator can pause or close it. Teammates can leave. Stop the forwarding
+and backend terminals with Ctrl+C to end access.
 `uv run --locked sahakaram lock` revokes local control sessions and closes managed
 Codex runtimes. Room closure does not terminate another person's existing Codex.
 
@@ -154,9 +170,9 @@ Codex runtimes. Room closure does not terminate another person's existing Codex.
 
 - Missing Sahakaram tools: restart/reload Codex after installation; verify uv is
   on the GUI application's PATH, and inspect the MCP startup log.
-- Connection refused/502: keep the host API and tunnel running; verify
+- Connection refused/502: keep the backend and forwarding session running; verify
   `http://127.0.0.1:8788/readyz` locally and `HOST_URL/readyz` through the tunnel.
-- Invalid invitation: use a fresh unused invite, with the same tunnel/host that
+- Invalid invitation: use a fresh unused invite, with the same forwarded host that
   created it. Never redeem an invite through an untrusted replacement URL.
 - Room full: agents retain their seats while disconnected. Ask the administrator
   to remove an unused teammate. Rejoining with a fresh invite creates another

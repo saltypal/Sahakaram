@@ -26,14 +26,31 @@ sessions from Sahakaram itself.
 | Discussion | Bounded messages, durable event history, and cursor-based replay |
 | Delegation | Create, assign, claim, block, and review tasks with stale-update protection |
 | Human controls | Invite teammates; pause, resume, close, or remove participants |
-| Persistence | PostgreSQL migrations, transactional events, and cross-room integrity checks |
+| Persistence | SQLite file, automatic migrations, transactional events, and cross-room integrity checks |
 | Optional account management | Isolated Codex homes, owned sessions, usage reads, interruption |
-| Friend demo | Local MCP on each device; temporary HTTPS tunnel to the host's room API |
+| Friend demo | Local MCP on each device; Dev Tunnel / forwarded HTTPS port to the host's room API |
 
 The current release is an **early preview**. A dashboard, automatic delegation,
 quota-triggered draining, verified provider identity, and GitHub permission checks
 are still planned. Agents perform coding and Git operations through their own
 existing tools; room messages do not impersonate the repository owner.
+
+## Backend and interfaces are independent
+
+The standalone backend owns rooms, permissions, tasks, events and SQLite. It has
+no dependency on MCP, the Codex SDK, a dashboard, or the forwarding provider.
+MCP is an optional HTTP client; a future dashboard uses the same versioned API.
+
+```sh
+uv sync --locked
+uv run --locked sahakaram-backend --session-minutes 120
+```
+
+The backend creates its SQLite file and applies migrations at startup. Source
+checkouts default to `.state/sahakaram.sqlite3`; the plugin uses `~/.sahakaram`.
+See [backend architecture](docs/backend.md) for running it without the plugin.
+When hosting for the installed plugin, set `SAHAKARAM_STATE_DIR` to `~/.sahakaram`
+in the hosting terminal as shown in the walkthrough.
 
 ## Install in Codex
 
@@ -67,8 +84,9 @@ installation source. The GitHub installation above avoids that issue.
 
 ## Try it with a friend
 
-Only the **host** needs PostgreSQL and, for different networks, cloudflared. A
-teammate needs uv, Codex, and the plugin. No provider password or API key is shared.
+The **host backend** stores collaboration in a local SQLite file. No database
+server is needed. For different networks, forward its port using VS Code or
+Microsoft Dev Tunnels. Teammates need uv, Codex, and the plugin.
 
 1. The host starts the database-backed room API and an HTTPS tunnel.
 2. The host's Codex calls `create_room`, then `create_invites` for an agent invite.
@@ -84,11 +102,11 @@ flowchart LR
     A[Host Codex + local MCP] --> H[Host room API]
     B[Friend Codex + local MCP] --> T[Temporary HTTPS tunnel]
     T --> H
-    H --> P[(PostgreSQL)]
+    H --> P[(Local SQLite file)]
 ```
 
-The tunnel exposes only the room API on port 8788. Keep the private account control
-service on port 8787 and PostgreSQL private. The tunnel URL alone grants no room
+Forward only the backend API on port 8788. Keep the private account control
+service on port 8787 and the SQLite file private. The tunnel URL alone grants no room
 membership; invitation secrets and room credentials are capabilities and must
 stay out of Git, screenshots, and public issues.
 
@@ -128,20 +146,19 @@ The SDK wrapper is used by protocol compatibility tests; its bundled CLI is not
 needed to run them:
 
 ```sh
-uv sync --locked --extra codex --no-install-package openai-codex-cli-bin
+uv sync --locked --extra plugin --extra codex --no-install-package openai-codex-cli-bin
 uv run --no-sync pytest -q
 uv run --no-sync ruff check src tests
 uv run --no-sync ruff format --check src tests
 uv run --no-sync mypy
 ```
 
-Set `SAHAKARAM_TEST_DATABASE_URL` to a disposable PostgreSQL database to run the
-persistence/integration tests; otherwise those tests skip. Each database test
-creates and drops its own random schema. Tests include three actual MCP stdio
-clients talking through an HTTP hub into PostgreSQL. Coding agents are scripted
-in these checks; they do not consume model inference allowance.
+All persistence tests use fresh local SQLite files and run without a database
+service or environment setup. Tests include three actual MCP stdio clients talking
+through an HTTP backend into SQLite. Coding agents are scripted in these checks;
+they do not consume model inference allowance.
 
-The GitHub workflow runs these checks against PostgreSQL. See
+The GitHub workflow runs these SQLite checks without service containers. See
 [database design](docs/database-design.md), [implementation details](docs/phases-1-3.md),
 and [the Phase 0 history](docs/phase-0.md) for the architectural boundaries.
 
@@ -150,7 +167,7 @@ and [the Phase 0 history](docs/phase-0.md) for the architectural boundaries.
 - One host process per database; restarting it pauses active rooms for human review.
 - Credentials expire after 15 minutes by default. For a bounded demo the host can
   explicitly choose `hub --session-minutes 120`; automated renewal is not implemented.
-- Quick Tunnel URLs change after restart. They are for development, not a production deployment.
+- Dev Tunnels / VS Code port forwarding are development transport; their login and availability are external to Sahakaram.
 - The host trusts companion usage reports. No automatic polling, quota balancing,
   or guaranteed throughput improvement is claimed.
 - Same-user linking is an optional human API flow; it does not combine provider limits.
