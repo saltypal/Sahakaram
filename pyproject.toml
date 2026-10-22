@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sahakaram"
+dynamic = ["version"]
+description = "Python MCP foundation for supervised coding-agent collaboration."
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "alembic>=1.15,<2",
+    "argon2-cffi>=23.1,<26",
+    "fastapi>=0.115,<1",
+    "filelock>=3.18,<4",
+    "httpx>=0.28,<1",
+    "mcp>=2,<3",
+    "pydantic>=2.11,<3",
+    "pydantic-settings>=2.8,<3",
+    "psycopg[binary]>=3.2,<4",
+    "pyjwt>=2.10,<3",
+    "sqlalchemy>=2.0,<3",
+    "typer>=0.15,<1",
+    "uvicorn>=0.34,<1",
+]
+
+[project.optional-dependencies]
+codex = ["openai-codex==0.163.0"]
+
+[project.scripts]
+sahakaram = "sahakaram.cli:app"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.15,<2",
+    "pytest>=8,<10",
+    "pytest-asyncio>=1,<2",
+    "ruff>=0.11,<1",
+]
+
+[tool.hatch.version]
+path = "src/sahakaram/__init__.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [".state", "dist", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+strict = true

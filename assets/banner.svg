@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="260" viewBox="0 0 1200 260" role="img" aria-label="Sahakaram — independent agents, shared direction">
+<rect width="1200" height="260" rx="20" fill="#111111"/>
+<path d="M0 235H1200" stroke="#F4C542" stroke-width="4"/>
+<g transform="translate(70 65)" fill="none" stroke="#F4C542" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="28" cy="15" r="15"/><circle cx="124" cy="15" r="15"/>
+<path d="M8 115V66Q8 45 29 45L60 75L77 63L102 45Q142 43 144 73V115"/>
+<path d="M32 66L62 101Q72 110 81 100L99 80L80 62M120 66L99 87"/>
+</g>
+<text x="275" y="123" fill="#F4C542" font-family="Arial, sans-serif" font-size="65" font-weight="700">Sahakaram</text>
+<text x="280" y="171" fill="#D8D8D8" font-family="Arial, sans-serif" font-size="23">Independent agents. Shared direction.</text>
+<text x="280" y="205" fill="#999999" font-family="Arial, sans-serif" font-size="16">Python · MCP · PostgreSQL · Human supervision</text>
+</svg>

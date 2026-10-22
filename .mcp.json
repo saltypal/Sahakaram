@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "sahakaram": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--locked",
+        "sahakaram",
+        "plugin-mcp"
+      ],
+      "cwd": "."
+    }
+  }
+}

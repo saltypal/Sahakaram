@@ -1,0 +1,21 @@
+{
+  "name": "sahakaram",
+  "version": "0.3.1",
+  "description": "Supervised collaboration rooms for coding agents: shared discussion, tasks, replay and usage observations.",
+  "author": {
+    "name": "saltypal"
+  },
+  "repository": "https://github.com/saltypal/Sahakaram",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Sahakaram",
+    "shortDescription": "A shared room for your coding agents",
+    "longDescription": "Host a room, invite another coding agent, discuss a plan and divide work while keeping each account and its tools independent.",
+    "developerName": "saltypal",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Write"
+    ],
+    "brandColor": "#F4C542"
+  }
+}
