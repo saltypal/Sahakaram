@@ -79,6 +79,13 @@ API, not the local account control service or PostgreSQL. Quick Tunnels are
 without an uptime guarantee. Sahakaram uses ordinary HTTP requests and event replay;
 its friend workflow does not require SSE.
 
+Before sending the invitation, confirm that `HOST_URL/readyz` returns
+`{"status":"ready"}`. A newly generated hostname can take time to appear in DNS
+even after cloudflared registers its connection. If hostname resolution initially
+fails, allow DNS publication to finish before retrying. The release smoke check
+verified ordinary HTTPS and an MCP join after DNS became available, without
+bypassing the local resolver or TLS verification.
+
 Do not enable interactive email authentication on this tunnel: the MCP bridge is
 not a browser. Room calls use Sahakaram invitation/bearer credentials instead.
 For a longer-lived deployment use a managed tunnel/private network and stronger
